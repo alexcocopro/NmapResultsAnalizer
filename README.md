@@ -1,7 +1,7 @@
-# NmapResultsAnalizer
+# NmapResultAnalizer
 
 
-This README provides an overview of the NmapResultsAnalyzer, its purpose, how to set it up, and how to use it.
+This README provides an overview of the NmapResultAnalyzer, its purpose, how to set it up, and how to use it.
 
 ## Table of Contents
 1.  Introduction
@@ -65,7 +65,7 @@ This tool is particularly useful for security analysts, penetration testers, and
 2.  **Navigate to the directory** where you saved `nmap_analyzer.py` and your Nmap scan result files.
 3.  **Execute the script** using Python 3:
     ```bash
-    python3 NmapResultsAnalyzer.py
+    python3 NmapResultAnalyzer.py
     ```
 
 The script will process the `.txt` files and generate a report named `acceso_remoto_reporte.txt` in the same directory.
