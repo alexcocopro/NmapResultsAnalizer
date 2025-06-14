@@ -86,7 +86,7 @@ def analyze_nmap_file(filepath):
     Retorna un diccionario con detalles del host y hallazgos, o None si el host no está activo.
     """
     findings = {
-        "ip": "N/A",
+        "target": "N/A", # Cambiado de 'ip' a 'target' para incluir dominios
         "os_guess": "N/A",
         "open_ports": [],
         "vulnerabilities": [],
@@ -102,17 +102,17 @@ def analyze_nmap_file(filepath):
         print(f"Advertencia: Archivo no encontrado {filepath}")
         return None
 
-    # Verificar si el host estaba activo
+    # Verificar si el host estaba activo. Si Nmap reporta "0 hosts up", lo descartamos.
     if "0 hosts up" in content:
-        # Nmap reporta que el host no estaba activo, no hay puertos ni servicios que analizar
         return None 
 
-    # Extraer IP
-    ip_match = re.search(r"Nmap scan report for (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", content)
-    if ip_match:
-        findings["ip"] = ip_match.group(1)
+    # Extraer Target (IP o Dominio/Subdominio)
+    # Patrón más flexible para IP o hostname/subdominio
+    target_match = re.search(r"Nmap scan report for ([\w.-]+(?:\.[\w.-]+)+)", content) # Captura dominios y subdominios
+    if target_match:
+        findings["target"] = target_match.group(1).strip()
     else:
-        # Si no se encuentra la IP, probablemente no es un archivo de escaneo Nmap válido o está incompleto
+        # Si no se encuentra el target, probablemente no es un archivo de escaneo Nmap válido o está incompleto
         return None 
 
     # Extraer OS (guess)
@@ -147,6 +147,7 @@ def analyze_nmap_file(filepath):
         # Detección de riesgos de acceso remoto por palabra clave en servicio/versión
         full_service_info = f"{service_stripped} {version_stripped}".lower()
         for keyword in REMOTE_ACCESS_KEYWORDS:
+            # Use word boundaries to avoid partial matches (e.g., "ssh" in "fish")
             if re.search(r'\b' + re.escape(keyword) + r'\b', full_service_info):
                 risk_msg = f"Servicio/versión '{service_stripped} {version_stripped}' en puerto {port} contiene palabra clave de acceso remoto: '{keyword}'."
                 if risk_msg not in findings["remote_access_risks"]: # Evitar duplicados
@@ -170,7 +171,7 @@ def analyze_nmap_file(filepath):
     # Buscaremos líneas que empiecen con '|_' o '|   ' y que contengan CVE o palabras clave de vulnerabilidad.
     # Se excluyen mensajes de "Couldn't find" o "No reply"
     vuln_pattern = re.compile(
-        r"^(?:\|\s+|_)\s+([^\n]+(?:CVE-\d{4}-\d+|VULNERABLE|EXPLOIT|CRITICAL|HIGH|MEDIUM|LOW|error: script execution failed).*)$",
+        r"^(?:\|\s+|_)\s*([^\n]+(?:CVE-\d{4}-\d+|VULNERABLE|EXPLOIT|CRITICAL|HIGH|MEDIUM|LOW|error: script execution failed|Authentication bypass|Command injection|SQL injection|XSS|Directory traversal|File disclosure|Weak credentials|Default credentials).*)$",
         re.MULTILINE | re.IGNORECASE
     )
     vuln_lines = vuln_pattern.findall(content)
@@ -178,7 +179,7 @@ def analyze_nmap_file(filepath):
     for line in vuln_lines:
         vuln_text = line.strip().replace("_", "").replace("|", "").strip()
         # Filtrar líneas que son reportes de "no encontrado" o "no vulnerable"
-        if not re.search(r"(couldn't find|no reply|no vulnerabilities|not vulnerable|could not be identified|no http-enum results)", vuln_text.lower()):
+        if not re.search(r"(couldn't find|no reply|no vulnerabilities|not vulnerable|could not be identified|no http-enum results|nothing found)", vuln_text.lower()):
             if vuln_text not in findings["vulnerabilities"]: # Evitar duplicados exactos
                 findings["vulnerabilities"].append(vuln_text)
             
@@ -237,7 +238,7 @@ def generate_report(all_findings):
                host_findings["obsolete_versions"]:
                 
                 found_any_significant_finding = True
-                out_f.write(f"### Findings for IP: {host_findings['ip']} ###\n")
+                out_f.write(f"### Findings for Target: {host_findings['target']} ###\n") # Cambiado a 'Target'
                 out_f.write(f"Estimated OS: {host_findings['os_guess']}\n")
                 
                 out_f.write(f"\n--- Open Ports Detected ---\n")
@@ -303,16 +304,16 @@ if __name__ == "__main__":
         filepath = os.path.join(SCAN_RESULTS_DIR, filename)
         print(f"  Processing: {filename}")
         findings = analyze_nmap_file(filepath)
-        if findings: # Only add if analyze_nmap_file returned a valid findings dictionary (i.e., IP was found and host was up)
+        if findings: # Only add if analyze_nmap_file returned a valid findings dictionary (i.e., target was found and host was up)
             all_scan_findings.append(findings)
 
     if all_scan_findings:
         generate_report(all_scan_findings)
         print(f"\nAnalysis complete! The report has been saved to: {OUTPUT_REPORT_FILE}")
     else:
-        print("\nNo valid scan files could be processed or no active hosts were found in the scans. Please ensure Nmap .txt files contain valid scan results (with detectable IP and active hosts).")
+        print("\nNo valid scan files could be processed or no active hosts were found in the scans. Please ensure Nmap .txt files contain valid scan results (with detectable target and active hosts).")
 
-    # --- New addition for author information ---
+    # --- Author information ---
     print("\n--------------------------------------------------")
     print("This script was developed by Alex Cabello, Cybersecurity Consultant.")
     print("--------------------------------------------------")
